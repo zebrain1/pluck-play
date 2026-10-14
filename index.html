@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- These meta tags are important for the PWA mobile app -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="PluckPlay">
+    <title>Minimalist Pluck & Play</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --primary-color: #ffffff;
+            --accent-color: #a0a0a0;
+            --staff-color: #333333;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: var(--bg-color); color: var(--primary-color);
+            font-family: sans-serif; overflow: hidden;
+            display: flex; flex-direction: column;
+            user-select: none; -webkit-user-select: none;
+            touch-action: none; overscroll-behavior: none; /* Stops mobile rubber-banding */
+        }
+
+        #start-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color); display: flex;
+            justify-content: center; align-items: center;
+            z-index: 100; cursor: pointer; transition: opacity 0.5s ease;
+        }
+
+        #start-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        /* Record Button */
+        #record-btn {
+            position: absolute; top: 20px; right: 20px;
+            padding: 10px 20px; background: #ff4444; color: white;
+            border: none; border-radius: 20px; font-weight: bold;
+            cursor: pointer; z-index: 10;
+        }
+        #record-btn.recording {
+            animation: pulse 1s infinite;
+            background: #cc0000;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* Interactive Area */
+        #interactive-area {
+            flex: 1; display: flex; flex-direction: row;
+            padding: 40px; gap: 40px; align-items: center; justify-content: center;
+        }
+
+        #strings {
+            display: flex; flex-direction: column; justify-content: space-between;
+            height: 60%; width: 50%; max-width: 500px; position: relative;
+        }
+
+        .string {
+            width: 100%; height: 2px; background-color: var(--accent-color);
+            position: relative; cursor: crosshair;
+        }
+        .string::before { content: ''; position: absolute; top: -20px; left: 0; right: 0; bottom: -20px; }
+        .string.vibrating { background-color: var(--primary-color); animation: vibrate 0.3s linear; }
+
+        #drums {
+            display: flex; flex-direction: column; justify-content: space-around;
+            height: 60%; gap: 30px;
+        }
+
+        .drum {
+            width: 60px; height: 60px; border: 2px solid var(--accent-color);
+            border-radius: 50%; cursor: pointer; position: relative;
+        }
+        .drum[data-type="kick"] { width: 80px; height: 80px; }
+        .drum[data-type="snare"] { width: 60px; height: 60px; border-radius: 10px; }
+        .drum[data-type="hihat"] { width: 40px; height: 40px; }
+        .drum.hit { background-color: rgba(255, 255, 255, 0.2); transform: scale(0.9); border-color: var(--primary-color); }
+
+        /* Sheet Music Area */
+        #sheet-music {
+            height: 150px; width: 100%; position: relative;
+            background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+            border-top: 1px solid #222; overflow: hidden;
+            display: flex; flex-direction: column; justify-content: center;
+        }
+
+        .staff-line { width: 100%; height: 1px; background-color: var(--staff-color); margin: 8px 0; z-index: 1; }
+        .note {
+            position: absolute; right: -20px; width: 12px; height: 12px;
+            background-color: var(--primary-color); border-radius: 50%;
+            z-index: 2; transform: translateY(-50%); animation: slideLeft 4s linear forwards;
+        }
+        .note.drum-note { background-color: transparent; border-radius: 0; }
+        .note.drum-note::before, .note.drum-note::after {
+            content: ''; position: absolute; width: 14px; height: 2px;
+            background-color: var(--primary-color); top: 5px; left: -1px;
+        }
+        .note.drum-note::before { transform: rotate(45deg); }
+        .note.drum-note::after { transform: rotate(-45deg); }
+
+        @keyframes vibrate {
+            0% { transform: translateY(0); }
+            25% { transform: translateY(-3px); }
+            50% { transform: translateY(3px); }
+            75% { transform: translateY(-1px); }
+            100% { transform: translateY(0); }
+        }
+        @keyframes slideLeft { to { right: 100vw; } }
+
+        @media (max-width: 768px) {
+            #interactive-area { flex-direction: column; }
+            #strings { width: 100%; height: 40%; }
+            #drums { flex-direction: row; height: auto; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <h2>Tap anywhere to start</h2>
+    </div>
+
+    <button id="record-btn" style="display: none;">🔴 Record</button>
+
+    <div id="interactive-area">
+        <div id="strings">
+            <div class="string" data-freq="329.63" data-y="10%"></div>
+            <div class="string" data-freq="246.94" data-y="25%"></div>
+            <div class="string" data-freq="196.00" data-y="40%"></div>
+            <div class="string" data-freq="146.83" data-y="55%"></div>
+            <div class="string" data-freq="110.00" data-y="70%"></div>
+            <div class="string" data-freq="82.41"  data-y="85%"></div>
+        </div>
+        <div id="drums">
+            <div class="drum" data-type="hihat" data-y="5%"></div>
+            <div class="drum" data-type="snare" data-y="45%"></div>
+            <div class="drum" data-type="kick" data-y="85%"></div>
+        </div>
+    </div>
+
+    <div id="sheet-music">
+        <div class="staff-line"></div><div class="staff-line"></div><div class="staff-line"></div><div class="staff-line"></div><div class="staff-line"></div>
+    </div>
+
+    <script>
+        let audioCtx, noiseBuffer;
+        let dest; // For recording
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        document.getElementById('start-overlay').addEventListener('click', function() {
+            this.classList.add('hidden');
+            document.getElementById('record-btn').style.display = 'block';
+            
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            dest = audioCtx.createMediaStreamDestination(); // Set up recording destination
+            createNoiseBuffer();
+        });
+
+        // Recording Logic
+        document.getElementById('record-btn').addEventListener('click', () => {
+            const btn = document.getElementById('record-btn');
+            if (!isRecording) {
+                recordedChunks = [];
+                mediaRecorder = new MediaRecorder(dest.stream);
+                mediaRecorder.ondataavailable = e => {
+                    if (e.data.size > 0) recordedChunks.push(e.data);
+                };
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'my-song.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                };
+                mediaRecorder.start();
+                isRecording = true;
+                btn.innerText = '⏹ Stop & Save';
+                btn.classList.add('recording');
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                btn.innerText = '🔴 Record';
+                btn.classList.remove('recording');
+            }
+        });
+
+        function createNoiseBuffer() {
+            const bufferSize = audioCtx.sampleRate * 2;
+            noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+        }
+
+        // --- SYNTHESIZERS ---
+        // Notice: gain.connect(dest) is added so the recorder hears it!
+        function playString(frequency) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(3000, audioCtx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 1.5);
+
+            gain.gain.setValueAtTime(1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2);
+
+            osc.connect(filter); filter.connect(gain);
+            gain.connect(audioCtx.destination); // For speakers
+            gain.connect(dest);                 // For recorder
+
+            osc.start(); osc.stop(audioCtx.currentTime + 2);
+        }
+
+        function playKick() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            gain.gain.setValueAtTime(1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination); gain.connect(dest);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function playSnare() {
+            if (!audioCtx) return;
+            const noise = audioCtx.createBufferSource(); noise.buffer = noiseBuffer;
+            const noiseFilter = audioCtx.createBiquadFilter(); const noiseGain = audioCtx.createGain();
+            noiseFilter.type = 'highpass'; noiseFilter.frequency.value = 1000;
+            noise.connect(noiseFilter); noiseFilter.connect(noiseGain);
+            noiseGain.gain.setValueAtTime(1, audioCtx.currentTime); noiseGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            noiseGain.connect(audioCtx.destination); noiseGain.connect(dest);
+            
+            const osc = audioCtx.createOscillator(); const oscGain = audioCtx.createGain();
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+            oscGain.gain.setValueAtTime(0.5, audioCtx.currentTime); oscGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(oscGain); oscGain.connect(audioCtx.destination); oscGain.connect(dest);
+            
+            noise.start(); osc.start();
+            noise.stop(audioCtx.currentTime + 0.2); osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playHihat() {
+            if (!audioCtx) return;
+            const noise = audioCtx.createBufferSource(); noise.buffer = noiseBuffer;
+            const noiseFilter = audioCtx.createBiquadFilter(); const noiseGain = audioCtx.createGain();
+            noiseFilter.type = 'bandpass'; noiseFilter.frequency.value = 10000;
+            noiseGain.gain.setValueAtTime(0.8, audioCtx.currentTime); noiseGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            noise.connect(noiseFilter); noiseFilter.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination); noiseGain.connect(dest);
+            noise.start(); noise.stop(audioCtx.currentTime + 0.05);
+        }
+
+        // --- VISUAL LOGIC & EVENTS ---
+        function addNoteToStaff(yPosition, isDrum = false) {
+            const note = document.createElement('div');
+            note.classList.add('note'); if (isDrum) note.classList.add('drum-note');
+            note.style.top = yPosition;
+            document.getElementById('sheet-music').appendChild(note);
+            setTimeout(() => { if(note.parentNode) note.parentNode.removeChild(note); }, 4000);
+        }
+
+        function handleInteract(element) {
+            if (!audioCtx) return;
+            if (element.classList.contains('string')) {
+                playString(parseFloat(element.getAttribute('data-freq')));
+                addNoteToStaff(element.getAttribute('data-y'), false);
+                element.classList.remove('vibrating'); void element.offsetWidth; element.classList.add('vibrating');
+            } else if (element.classList.contains('drum')) {
+                const type = element.getAttribute('data-type');
+                if (type === 'kick') playKick(); if (type === 'snare') playSnare(); if (type === 'hihat') playHihat();
+                addNoteToStaff(element.getAttribute('data-y'), true);
+                element.classList.remove('hit'); void element.offsetWidth; element.classList.add('hit');
+                setTimeout(() => element.classList.remove('hit'), 100);
+            }
+        }
+
+        document.querySelectorAll('.string, .drum').forEach(el => {
+            el.addEventListener('mouseenter', (e) => handleInteract(e.target));
+        });
+
+        let lastTouchedElement = null;
+        document.getElementById('interactive-area').addEventListener('touchmove', (e) => {
+            e.preventDefault(); 
+            const touch = e.touches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (element && element !== lastTouchedElement && (element.classList.contains('string') || element.classList.contains('drum'))) {
+                handleInteract(element);
+                lastTouchedElement = element;
+            }
+        }, { passive: false });
+        document.getElementById('interactive-area').addEventListener('touchend', () => lastTouchedElement = null);
+    </script>
+</body>
+</html>
